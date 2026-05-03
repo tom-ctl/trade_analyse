@@ -4,7 +4,7 @@ Programme Python pour collecter, stocker et préparer des données crypto utilis
 
 ## Structure
 
-- `data_collector.py` : appels API Binance Futures, Bybit et CoinGecko avec retries, backoff et gestion rate limit.
+- `collector.py` : appels API Binance Futures avec retries, backoff et gestion rate limit.
 - `database.py` : base SQLite, table `market_data`, index et upsert anti-duplication.
 - `features.py` : RSI, EMA 20/50, ATR, log returns, volatilité rolling, volume spike, open interest delta.
 - `main.py` : boucle principale toutes les 5 minutes, logs et arrêt propre.
@@ -39,6 +39,6 @@ La base SQLite est créée automatiquement. Les timestamps sont stockés en UTC 
 
 ## Notes d'architecture
 
-Binance alimente la table `market_data` car son schéma correspond aux colonnes demandées. Bybit est collecté dans la boucle et résumé dans les logs pour garder la table imposée inchangée. Les méthodes Bybit sont isolées afin d'ajouter ensuite des tables dédiées ou un WebSocket sans refactor majeur.
+Binance Futures alimente la table `market_data`. Le collecteur est isolé afin d'ajouter ensuite d'autres sources ou un WebSocket sans refactor majeur.
 
 Pour un VPS, lancer via `systemd`, `supervisor` ou Docker avec redémarrage automatique.
