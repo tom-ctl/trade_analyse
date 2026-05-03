@@ -41,7 +41,7 @@ def latest_feature_row(df: pd.DataFrame) -> dict[str, object]:
 
 def _log_returns(close: pd.Series) -> pd.Series:
     return (close / close.shift(1)).apply(
-        lambda value: pd.NA if pd.isna(value) else math.log(value)
+        lambda value: float("nan") if pd.isna(value) else math.log(value)
     )
 
 
