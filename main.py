@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 
-from data_collector import DataCollector, HTTPConfig, summarize_bybit
+from collector import HTTPConfig, MarketDataCollector
 from database import Database
 from features import latest_feature_row
 
@@ -62,7 +62,7 @@ def handle_shutdown(signum: int, _frame: object) -> None:
     logger.info("Shutdown signal received: %s", signum)
 
 
-def run_once(config: AppConfig, collector: DataCollector, db: Database) -> None:
+def run_once(config: AppConfig, collector: MarketDataCollector, db: Database) -> None:
     loop_started = datetime.now(timezone.utc)
     logger.info(
         "Collector tick started at %s for symbols=%s interval=%s",
@@ -74,19 +74,16 @@ def run_once(config: AppConfig, collector: DataCollector, db: Database) -> None:
     rows = []
     for symbol in config.symbols:
         try:
-            snapshot = collector.collect_symbol_snapshot(symbol, config.interval)
-            row = snapshot["market_data"]
+            row = collector.collect(symbol, config.interval)
             rows.append(row)
-
-            bybit_summary = summarize_bybit(snapshot["bybit"])
             logger.info(
-                "%s close=%.4f oi=%s funding=%s ls_ratio=%s bybit=%s",
+                "%s close=%.4f timestamp=%s oi=%s funding=%s ls_ratio=%s",
                 symbol,
                 row["close"],
+                row["timestamp"],
                 _fmt(row.get("open_interest")),
                 _fmt(row.get("funding_rate")),
                 _fmt(row.get("long_short_ratio")),
-                bybit_summary,
             )
         except Exception:
             logger.exception("Failed to collect symbol=%s", symbol)
@@ -94,27 +91,20 @@ def run_once(config: AppConfig, collector: DataCollector, db: Database) -> None:
     changed = db.upsert_market_data(rows)
     logger.info("DB upsert complete rows_changed=%s", changed)
 
-    try:
-        global_data = collector.fetch_coingecko_global()
-        logger.info("CoinGecko global=%s", global_data)
-    except Exception:
-        logger.exception("Failed to collect CoinGecko global market data")
-
     for symbol in config.symbols:
         try:
             history = db.load_market_data(symbol, limit=500)
             feature_row = latest_feature_row(history)
             if feature_row:
                 logger.info(
-                    "%s features rsi=%s ema20=%s ema50=%s atr=%s vol=%s oi_delta=%s volume_spike=%s",
+                    "%s features rsi=%s ema20=%s ema50=%s returns=%s volatility=%s oi_delta=%s",
                     symbol,
                     _fmt(feature_row.get("rsi")),
                     _fmt(feature_row.get("ema_20")),
                     _fmt(feature_row.get("ema_50")),
-                    _fmt(feature_row.get("atr")),
+                    _fmt(feature_row.get("returns")),
                     _fmt(feature_row.get("volatility_rolling")),
                     _fmt(feature_row.get("open_interest_delta")),
-                    feature_row.get("volume_spike"),
                 )
         except Exception:
             logger.exception("Failed to calculate features for symbol=%s", symbol)
@@ -126,7 +116,7 @@ def run_forever() -> None:
     signal.signal(signal.SIGINT, handle_shutdown)
     signal.signal(signal.SIGTERM, handle_shutdown)
 
-    collector = DataCollector(config.http)
+    collector = MarketDataCollector(config.http)
     db = Database(config.db_path)
 
     logger.info("Starting collector loop. db=%s loop_seconds=%s", config.db_path, config.loop_seconds)
